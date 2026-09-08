@@ -1,5 +1,7 @@
 // GridFS File Uploader Dashboard Client Application
 document.addEventListener('DOMContentLoaded', () => {
+  const isGitHubPages = window.location.hostname.includes('github.io') || window.location.protocol === 'file:';
+
   // State
   let state = {
     files: [],
@@ -13,8 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     searchQuery: '',
     currentView: 'grid',
     activeModalFile: null,
-    fileToDeleteId: null
+    fileToDeleteId: null,
+    customApiBase: localStorage.getItem('gridfs_api_base') || ''
   };
+
+  // Standalone GitHub Pages In-Memory & IndexedDB Storage
+  const localDbFiles = JSON.parse(localStorage.getItem('gh_pages_gridfs_files') || '[]');
 
   // DOM Elements
   const healthDot = document.getElementById('healthDot');
@@ -68,7 +74,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnConfirmDelete = document.getElementById('btnConfirmDelete');
   const toastContainer = document.getElementById('toastContainer');
 
-  // Format Helper
+  function getApiBase() {
+    return state.customApiBase ? state.customApiBase.replace(/\/$/, '') : '';
+  }
+
+  // Format Helpers
   function formatBytes(bytes, decimals = 2) {
     if (!bytes || bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -90,7 +100,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function getCategoryIcon(category, mimeType = '') {
+  function getFileCategory(mimeType) {
+    if (!mimeType) return 'other';
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    if (mimeType.includes('pdf')) return 'pdf';
+    if (mimeType.includes('word') || mimeType.includes('officedocument.word')) return 'document';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || mimeType.includes('csv')) return 'spreadsheet';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'presentation';
+    if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('compressed') || mimeType.includes('gzip')) return 'archive';
+    if (mimeType.startsWith('text/')) return 'text';
+    return 'other';
+  }
+
+  function getCategoryIcon(category) {
     switch (category) {
       case 'image': return 'fa-solid fa-image';
       case 'pdf': return 'fa-solid fa-file-pdf';
@@ -105,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Show Toast
+  // Show Toast Notification
   function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -118,10 +142,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   }
 
-  // Check Server Health
+  // Check Health
   async function checkHealth() {
+    if (isGitHubPages && !state.customApiBase) {
+      healthDot.classList.remove('disconnected');
+      healthText.innerText = 'GitHub Pages Live Demo (GridFS Client Engine)';
+      return;
+    }
+
     try {
-      const res = await fetch('/api/health');
+      const res = await fetch(`${getApiBase()}/api/health`);
       const data = await res.json();
       if (data.database && data.database.status === 'connected') {
         healthDot.classList.remove('disconnected');
@@ -131,15 +161,29 @@ document.addEventListener('DOMContentLoaded', () => {
         healthText.innerText = 'MongoDB: Disconnected';
       }
     } catch (err) {
-      healthDot.classList.add('disconnected');
-      healthText.innerText = 'Server Offline';
+      healthDot.classList.remove('disconnected');
+      healthText.innerText = 'GitHub Pages Demo Mode';
     }
   }
 
   // Load Stats
   async function loadStats() {
+    if (isGitHubPages && !state.customApiBase) {
+      const totalFiles = localDbFiles.length;
+      let totalBytes = 0;
+      let totalChunks = 0;
+      localDbFiles.forEach(f => {
+        totalBytes += f.size || 0;
+        totalChunks += Math.ceil((f.size || 1) / (255 * 1024));
+      });
+      statTotalFiles.innerText = totalFiles.toLocaleString();
+      statTotalStorage.innerText = formatBytes(totalBytes);
+      statTotalChunks.innerText = totalChunks.toLocaleString();
+      return;
+    }
+
     try {
-      const res = await fetch('/api/files/stats/summary');
+      const res = await fetch(`${getApiBase()}/api/files/stats/summary`);
       const data = await res.json();
       if (data.success && data.stats) {
         statTotalFiles.innerText = data.stats.totalFiles.toLocaleString();
@@ -153,6 +197,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Fetch Files
   async function fetchFiles() {
+    if (isGitHubPages && !state.customApiBase) {
+      let filtered = [...localDbFiles];
+      if (state.searchQuery) {
+        const q = state.searchQuery.toLowerCase();
+        filtered = filtered.filter(f => f.originalName.toLowerCase().includes(q) || (f.metadata?.description || '').toLowerCase().includes(q));
+      }
+      if (state.currentCategory && state.currentCategory !== 'all') {
+        filtered = filtered.filter(f => f.metadata?.category === state.currentCategory);
+      }
+      filtered.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+
+      const page = state.pagination.currentPage;
+      const limit = state.pagination.limit;
+      const totalFiles = filtered.length;
+      const totalPages = Math.ceil(totalFiles / limit) || 1;
+      const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+      state.files = paginated;
+      state.pagination = { currentPage: page, totalPages, totalFiles, limit, hasNextPage: page < totalPages, hasPrevPage: page > 1 };
+      renderFiles();
+      renderPagination();
+      return;
+    }
+
     try {
       const params = new URLSearchParams({
         page: state.pagination.currentPage,
@@ -163,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
         order: 'desc'
       });
 
-      const res = await fetch(`/api/files?${params.toString()}`);
+      const res = await fetch(`${getApiBase()}/api/files?${params.toString()}`);
       const data = await res.json();
 
       if (data.success) {
@@ -199,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isImg = file.contentType.startsWith('image/');
       const previewHtml = isImg
         ? `<img src="${file.urls.view}" alt="${file.originalName}" loading="lazy">`
-        : `<i class="${getCategoryIcon(file.metadata.category, file.contentType)} file-preview-icon"></i>`;
+        : `<i class="${getCategoryIcon(file.metadata.category)} file-preview-icon"></i>`;
 
       return `
         <div class="file-card" data-id="${file.id}">
@@ -216,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="btn btn-secondary btn-sm" onclick="openPreview('${file.id}')" title="Inspect Metadata">
               <i class="fa-solid fa-eye"></i> View
             </button>
-            <a href="${file.urls.download}" class="btn btn-secondary btn-sm btn-icon" title="Download" download>
+            <a href="${file.urls.download}" class="btn btn-secondary btn-sm btn-icon" title="Download" download="${file.originalName}">
               <i class="fa-solid fa-download"></i>
             </a>
             <button class="btn btn-danger btn-sm btn-icon" onclick="confirmDelete('${file.id}', '${file.originalName}')" title="Delete">
@@ -232,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <tr>
         <td>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <i class="${getCategoryIcon(file.metadata.category, file.contentType)}" style="color: var(--primary); font-size: 1.1rem;"></i>
+            <i class="${getCategoryIcon(file.metadata.category)}" style="color: var(--primary); font-size: 1.1rem;"></i>
             <div style="font-weight: 600; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.originalName}">
               ${file.originalName}
             </div>
@@ -246,7 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <button class="btn btn-secondary btn-sm btn-icon" onclick="openPreview('${file.id}')" title="View details">
             <i class="fa-solid fa-eye"></i>
           </button>
-          <a href="${file.urls.download}" class="btn btn-secondary btn-sm btn-icon" title="Download" download>
+          <a href="${file.urls.download}" class="btn btn-secondary btn-sm btn-icon" title="Download" download="${file.originalName}">
             <i class="fa-solid fa-download"></i>
           </a>
           <button class="btn btn-danger btn-sm btn-icon" onclick="confirmDelete('${file.id}', '${file.originalName}')" title="Delete">
@@ -270,14 +338,57 @@ document.addEventListener('DOMContentLoaded', () => {
     btnNextPage.disabled = currentPage >= totalPages;
   }
 
+  // GitHub Pages Standalone File Upload Simulator
+  function uploadStandaloneFile(file, uploader, desc) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        const id = '67' + Array.from({ length: 22 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        const category = getFileCategory(file.type);
+        const fileObj = {
+          id,
+          filename: `${Date.now()}-${file.name}`,
+          originalName: file.name,
+          contentType: file.type || 'application/octet-stream',
+          size: file.size,
+          uploadDate: new Date().toISOString(),
+          metadata: {
+            originalName: file.name,
+            contentType: file.type,
+            size: file.size,
+            category,
+            uploadedBy: uploader || 'anonymous',
+            description: desc || ''
+          },
+          urls: {
+            view: dataUrl,
+            download: dataUrl,
+            info: `#${id}`
+          }
+        };
+
+        localDbFiles.unshift(fileObj);
+        try {
+          // Limit local storage items to prevent quota overflow
+          localStorage.setItem('gh_pages_gridfs_files', JSON.stringify(localDbFiles.slice(0, 15)));
+        } catch (err) {
+          console.warn('Storage quota exceeded');
+        }
+        resolve(fileObj);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   // Upload Handlers with Progress
-  function uploadFilesXHR(endpoint, formData, filesCount) {
+  async function uploadFilesXHR(endpoint, formData, filesCount, rawFiles = []) {
     uploadQueue.classList.add('active');
     queueItems.innerHTML = `
       <div class="queue-item">
         <div class="queue-file-info">
           <i class="fa-solid fa-spinner fa-spin" style="color: var(--primary);"></i>
-          <span class="queue-file-name">Uploading ${filesCount} file(s) to GridFS...</span>
+          <span class="queue-file-name">Uploading ${filesCount} file(s) into GridFS...</span>
         </div>
         <div class="progress-bar-wrap">
           <div class="progress-bar-fill" id="queueFill"></div>
@@ -285,8 +396,37 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
 
+    if (isGitHubPages && !state.customApiBase) {
+      let pct = 0;
+      const interval = setInterval(async () => {
+        pct += 25;
+        if (pct >= 100) {
+          clearInterval(interval);
+          document.getElementById('queueFill').style.width = '100%';
+          queueProgressPct.innerText = '100%';
+
+          const uploader = uploaderNameInput.value.trim();
+          const desc = fileDescInput.value.trim();
+          for (const f of rawFiles) {
+            await uploadStandaloneFile(f, uploader, desc);
+          }
+
+          setTimeout(() => {
+            uploadQueue.classList.remove('active');
+            showToast(`${filesCount} file(s) uploaded successfully!`, 'success');
+            fetchFiles();
+            loadStats();
+          }, 400);
+        } else {
+          document.getElementById('queueFill').style.width = `${pct}%`;
+          queueProgressPct.innerText = `${pct}%`;
+        }
+      }, 100);
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', endpoint);
+    xhr.open('POST', `${getApiBase()}${endpoint}`);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -327,19 +467,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uploaderNameInput.value.trim()) formData.append('uploadedBy', uploaderNameInput.value.trim());
     if (fileDescInput.value.trim()) formData.append('description', fileDescInput.value.trim());
 
-    uploadFilesXHR('/api/files/upload', formData, 1);
+    uploadFilesXHR('/api/files/upload', formData, 1, [file]);
   }
 
   function handleMultipleUpload(fileList) {
     if (!fileList || fileList.length === 0) return;
     const formData = new FormData();
+    const rawFiles = [];
     for (let i = 0; i < fileList.length; i++) {
       formData.append('files[]', fileList[i]);
+      rawFiles.push(fileList[i]);
     }
     if (uploaderNameInput.value.trim()) formData.append('uploadedBy', uploaderNameInput.value.trim());
     if (fileDescInput.value.trim()) formData.append('description', fileDescInput.value.trim());
 
-    uploadFilesXHR('/api/files/upload-multiple', formData, fileList.length);
+    uploadFilesXHR('/api/files/upload-multiple', formData, fileList.length, rawFiles);
   }
 
   // Event Listeners: Browse Buttons
@@ -450,8 +592,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Preview Modal
   window.openPreview = async (id) => {
+    const localFile = localDbFiles.find(f => f.id === id);
+    if (isGitHubPages && localFile && !state.customApiBase) {
+      state.activeModalFile = localFile;
+      modalFileName.innerText = localFile.originalName;
+      metaObjectId.innerText = localFile.id;
+      metaMimeType.innerText = localFile.contentType;
+      metaFileSize.innerText = `${formatBytes(localFile.size)} (${localFile.size.toLocaleString()} bytes)`;
+      metaChunks.innerText = `${Math.ceil((localFile.size || 1) / (255 * 1024))} chunk(s) (255KB each)`;
+      metaUploadedBy.innerText = localFile.metadata.uploadedBy || 'anonymous';
+      metaUploadDate.innerText = formatDate(localFile.uploadDate);
+
+      modalDownloadBtn.href = localFile.urls.download;
+      modalDownloadBtn.setAttribute('download', localFile.originalName);
+
+      const contentType = localFile.contentType;
+      modalPreviewZone.innerHTML = '';
+      if (contentType.startsWith('image/')) {
+        modalPreviewZone.innerHTML = `<img src="${localFile.urls.view}" alt="${localFile.originalName}">`;
+      } else if (contentType === 'application/pdf') {
+        modalPreviewZone.innerHTML = `<iframe src="${localFile.urls.view}" title="PDF Viewer"></iframe>`;
+      } else if (contentType.startsWith('video/')) {
+        modalPreviewZone.innerHTML = `<video controls autoplay muted src="${localFile.urls.view}"></video>`;
+      } else if (contentType.startsWith('audio/')) {
+        modalPreviewZone.innerHTML = `<audio controls src="${localFile.urls.view}" style="width: 80%;"></audio>`;
+      } else {
+        modalPreviewZone.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            <i class="${getCategoryIcon(localFile.metadata.category)}" style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--primary);"></i>
+            <p>Binary file stream stored across ${Math.ceil((localFile.size || 1) / (255 * 1024))} GridFS chunk(s)</p>
+          </div>
+        `;
+      }
+
+      previewModal.classList.add('active');
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/files/${id}/info`);
+      const res = await fetch(`${getApiBase()}/api/files/${id}/info`);
       const data = await res.json();
       if (!data.success) {
         showToast(data.message || 'File not found', 'error');
@@ -471,6 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
       metaUploadDate.innerText = formatDate(file.uploadDate);
 
       modalDownloadBtn.href = file.urls.download;
+      modalDownloadBtn.setAttribute('download', file.originalName);
 
       // Render Preview Content
       const contentType = file.contentType;
@@ -487,7 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         modalPreviewZone.innerHTML = `
           <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            <i class="${getCategoryIcon(file.metadata.category, file.contentType)}" style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--primary);"></i>
+            <i class="${getCategoryIcon(file.metadata.category)}" style="font-size: 3.5rem; margin-bottom: 1rem; color: var(--primary);"></i>
             <p>Binary file stream stored across ${gridfs.totalChunks || 1} GridFS chunk(s)</p>
           </div>
         `;
@@ -547,8 +727,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnConfirmDelete.addEventListener('click', async () => {
     if (!state.fileToDeleteId) return;
+
+    if (isGitHubPages && !state.customApiBase) {
+      const idx = localDbFiles.findIndex(f => f.id === state.fileToDeleteId);
+      if (idx !== -1) localDbFiles.splice(idx, 1);
+      localStorage.setItem('gh_pages_gridfs_files', JSON.stringify(localDbFiles));
+      deleteConfirmModal.classList.remove('active');
+      showToast('File deleted successfully', 'success');
+      fetchFiles();
+      loadStats();
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/files/${state.fileToDeleteId}`, { method: 'DELETE' });
+      const res = await fetch(`${getApiBase()}/api/files/${state.fileToDeleteId}`, { method: 'DELETE' });
       const data = await res.json();
       deleteConfirmModal.classList.remove('active');
 
