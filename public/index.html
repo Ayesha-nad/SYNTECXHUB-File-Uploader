@@ -20,13 +20,13 @@
         </div>
         <div>
           <h1 class="brand-title">GridFS File Uploader</h1>
-          <p class="brand-subtitle">Stream-native file storage on MongoDB GridFS with Multer</p>
+          <p class="brand-subtitle">Stream-native file storage on MongoDB GridFS</p>
         </div>
       </div>
       <div class="header-status">
         <div class="status-pill" id="healthPill">
           <span class="status-dot" id="healthDot"></span>
-          <span id="healthText">Checking MongoDB...</span>
+          <span id="healthText">Checking GridFS...</span>
         </div>
       </div>
     </header>
@@ -37,28 +37,28 @@
         <div class="stat-icon"><i class="fa-solid fa-folder-open"></i></div>
         <div>
           <div class="stat-val" id="statTotalFiles">0</div>
-          <div class="stat-lbl">Total Uploaded Files</div>
+          <div class="stat-lbl">Uploaded Files</div>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><i class="fa-solid fa-database"></i></div>
         <div>
           <div class="stat-val" id="statTotalStorage">0 B</div>
-          <div class="stat-lbl">GridFS Storage Consumed</div>
+          <div class="stat-lbl">Storage Consumed</div>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><i class="fa-solid fa-cubes"></i></div>
         <div>
           <div class="stat-val" id="statTotalChunks">0</div>
-          <div class="stat-lbl">Binary Chunks in fs.chunks</div>
+          <div class="stat-lbl">GridFS Chunks</div>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-icon"><i class="fa-solid fa-shield-halved"></i></div>
         <div>
           <div class="stat-val" id="statMaxLimit">10 MB</div>
-          <div class="stat-lbl">Max Upload Limit</div>
+          <div class="stat-lbl">Max Size Limit</div>
         </div>
       </div>
     </section>
@@ -73,7 +73,7 @@
           <i class="fa-solid fa-cloud-arrow-up"></i>
         </div>
         <h2 class="drop-zone-title">Drag & Drop files here, or browse</h2>
-        <p class="drop-zone-desc">Supports images, PDFs, Office docs, plain text, and archives (Up to 10MB)</p>
+        <p class="drop-zone-desc">Images, PDFs, Office docs, text, and archives (Up to 10MB)</p>
         
         <div class="drop-zone-actions">
           <button class="btn btn-primary" id="btnBrowseSingle">
@@ -88,7 +88,7 @@
       <!-- Metadata customization inputs -->
       <div class="upload-meta-bar">
         <div>
-          <input type="text" id="uploaderNameInput" class="input-field" placeholder="Uploaded by (e.g., John Doe)">
+          <input type="text" id="uploaderNameInput" class="input-field" placeholder="Uploaded by (e.g. John Doe)">
         </div>
         <div>
           <input type="text" id="fileDescInput" class="input-field" placeholder="Optional description or tags">
@@ -98,8 +98,8 @@
       <!-- Upload Progress / Queue -->
       <div class="upload-queue" id="uploadQueue">
         <div class="queue-header">
-          <h4 style="font-size: 0.9rem; font-weight: 600;">Upload Progress</h4>
-          <span id="queueProgressPct" style="font-size: 0.8rem; color: var(--text-secondary);">0%</span>
+          <h4 style="font-size: 0.85rem; font-weight: 600;">Upload Progress</h4>
+          <span id="queueProgressPct" style="font-size: 0.775rem; color: var(--text-secondary);">0%</span>
         </div>
         <div class="queue-items" id="queueItems"></div>
       </div>
@@ -111,12 +111,12 @@
       <div class="controls-bar">
         <div class="search-wrap">
           <i class="fa-solid fa-magnifying-glass search-icon"></i>
-          <input type="text" id="searchInput" class="input-field search-input" placeholder="Search files by name or description...">
+          <input type="text" id="searchInput" class="input-field search-input" placeholder="Search files...">
         </div>
 
         <div class="filters-wrap">
           <div class="filter-chips" id="filterChips">
-            <button class="chip active" data-category="all">All Files</button>
+            <button class="chip active" data-category="all">All</button>
             <button class="chip" data-category="image">Images</button>
             <button class="chip" data-category="pdf">PDFs</button>
             <button class="chip" data-category="document">Docs</button>
@@ -162,7 +162,7 @@
           <button class="btn btn-secondary btn-sm" id="btnPrevPage" disabled>
             <i class="fa-solid fa-chevron-left"></i> Prev
           </button>
-          <span id="pageIndicator" style="font-size: 0.85rem; font-weight: 600; padding: 0 0.5rem;">Page 1 of 1</span>
+          <span id="pageIndicator" style="font-size: 0.8rem; font-weight: 600; padding: 0 0.35rem;">Page 1 of 1</span>
           <button class="btn btn-secondary btn-sm" id="btnNextPage" disabled>
             Next <i class="fa-solid fa-chevron-right"></i>
           </button>
@@ -208,12 +208,12 @@
           </div>
         </div>
 
-        <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+        <div class="modal-actions">
           <a href="#" class="btn btn-primary" id="modalDownloadBtn" target="_blank">
             <i class="fa-solid fa-download"></i> Download File
           </a>
           <button class="btn btn-secondary" id="modalCopyLinkBtn">
-            <i class="fa-solid fa-link"></i> Copy Direct Stream Link
+            <i class="fa-solid fa-link"></i> Copy Link
           </button>
           <button class="btn btn-danger" id="modalDeleteBtn" style="margin-left: auto;">
             <i class="fa-solid fa-trash"></i> Delete
@@ -225,18 +225,18 @@
 
   <!-- Delete Confirmation Modal -->
   <div class="modal-overlay" id="deleteConfirmModal">
-    <div class="modal-box" style="max-width: 440px; text-align: center;">
-      <div class="modal-body" style="padding: 2rem;">
-        <div style="width: 56px; height: 56px; background: rgba(239, 68, 68, 0.15); color: var(--danger); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 1.25rem;">
+    <div class="modal-box" style="max-width: 400px; text-align: center;">
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div style="width: 48px; height: 48px; background: rgba(239, 68, 68, 0.15); color: var(--danger); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; margin: 0 auto 1rem;">
           <i class="fa-solid fa-triangle-exclamation"></i>
         </div>
-        <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Delete this file?</h3>
-        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem;" id="deleteConfirmText">
-          This will permanently delete the file metadata and all its binary chunks from MongoDB GridFS.
+        <h3 style="font-size: 1.1rem; margin-bottom: 0.4rem;">Delete this file?</h3>
+        <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.25rem;" id="deleteConfirmText">
+          This will permanently remove the file metadata and binary chunks from GridFS.
         </p>
-        <div style="display: flex; gap: 0.75rem; justify-content: center;">
-          <button class="btn btn-secondary" id="btnCancelDelete">Cancel</button>
-          <button class="btn btn-danger" id="btnConfirmDelete">Yes, Delete Permanently</button>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="btnCancelDelete" style="flex: 1;">Cancel</button>
+          <button class="btn btn-danger" id="btnConfirmDelete" style="flex: 1;">Delete</button>
         </div>
       </div>
     </div>
