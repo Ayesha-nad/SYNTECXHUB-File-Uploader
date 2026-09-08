@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GridFS File Uploader & Stream Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+        </div>
+        <div>
+          <h1 class="brand-title">GridFS File Uploader</h1>
+          <p class="brand-subtitle">Stream-native file storage on MongoDB GridFS with Multer</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-pill" id="healthPill">
+          <span class="status-dot" id="healthDot"></span>
+          <span id="healthText">Checking MongoDB...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-folder-open"></i></div>
+        <div>
+          <div class="stat-val" id="statTotalFiles">0</div>
+          <div class="stat-lbl">Total Uploaded Files</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-database"></i></div>
+        <div>
+          <div class="stat-val" id="statTotalStorage">0 B</div>
+          <div class="stat-lbl">GridFS Storage Consumed</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-cubes"></i></div>
+        <div>
+          <div class="stat-val" id="statTotalChunks">0</div>
+          <div class="stat-lbl">Binary Chunks in fs.chunks</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fa-solid fa-shield-halved"></i></div>
+        <div>
+          <div class="stat-val" id="statMaxLimit">10 MB</div>
+          <div class="stat-lbl">Max Upload Limit</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Upload Card -->
+    <section class="upload-card">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInputSingle" style="display: none;">
+        <input type="file" id="fileInputMultiple" multiple style="display: none;">
+        
+        <div class="drop-zone-icon">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+        </div>
+        <h2 class="drop-zone-title">Drag & Drop files here, or browse</h2>
+        <p class="drop-zone-desc">Supports images, PDFs, Office docs, plain text, and archives (Up to 10MB)</p>
+        
+        <div class="drop-zone-actions">
+          <button class="btn btn-primary" id="btnBrowseSingle">
+            <i class="fa-solid fa-file-arrow-up"></i> Upload Single File
+          </button>
+          <button class="btn btn-secondary" id="btnBrowseMultiple">
+            <i class="fa-solid fa-files"></i> Upload Multiple Files
+          </button>
+        </div>
+      </div>
+
+      <!-- Metadata customization inputs -->
+      <div class="upload-meta-bar">
+        <div>
+          <input type="text" id="uploaderNameInput" class="input-field" placeholder="Uploaded by (e.g., John Doe)">
+        </div>
+        <div>
+          <input type="text" id="fileDescInput" class="input-field" placeholder="Optional description or tags">
+        </div>
+      </div>
+
+      <!-- Upload Progress / Queue -->
+      <div class="upload-queue" id="uploadQueue">
+        <div class="queue-header">
+          <h4 style="font-size: 0.9rem; font-weight: 600;">Upload Progress</h4>
+          <span id="queueProgressPct" style="font-size: 0.8rem; color: var(--text-secondary);">0%</span>
+        </div>
+        <div class="queue-items" id="queueItems"></div>
+      </div>
+    </section>
+
+    <!-- File Explorer Section -->
+    <section>
+      <!-- Controls -->
+      <div class="controls-bar">
+        <div class="search-wrap">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="searchInput" class="input-field search-input" placeholder="Search files by name or description...">
+        </div>
+
+        <div class="filters-wrap">
+          <div class="filter-chips" id="filterChips">
+            <button class="chip active" data-category="all">All Files</button>
+            <button class="chip" data-category="image">Images</button>
+            <button class="chip" data-category="pdf">PDFs</button>
+            <button class="chip" data-category="document">Docs</button>
+            <button class="chip" data-category="archive">Archives</button>
+            <button class="chip" data-category="text">Text</button>
+          </div>
+
+          <div class="view-toggle">
+            <button class="view-btn active" id="btnViewGrid" title="Grid View">
+              <i class="fa-solid fa-table-cells-large"></i>
+            </button>
+            <button class="view-btn" id="btnViewTable" title="Table View">
+              <i class="fa-solid fa-list"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Files Grid View -->
+      <div class="file-grid" id="fileGrid"></div>
+
+      <!-- Files Table View -->
+      <div class="file-table-wrap" id="fileTableWrap">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Size</th>
+              <th>Uploaded By</th>
+              <th>Upload Date</th>
+              <th style="text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="fileTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-wrap" id="paginationWrap">
+        <div class="pagination-info" id="paginationInfo">Showing 0 of 0 files</div>
+        <div class="pagination-controls">
+          <button class="btn btn-secondary btn-sm" id="btnPrevPage" disabled>
+            <i class="fa-solid fa-chevron-left"></i> Prev
+          </button>
+          <span id="pageIndicator" style="font-size: 0.85rem; font-weight: 600; padding: 0 0.5rem;">Page 1 of 1</span>
+          <button class="btn btn-secondary btn-sm" id="btnNextPage" disabled>
+            Next <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- File Preview & Metadata Modal -->
+  <div class="modal-overlay" id="previewModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalFileName">File Details</h3>
+        <button class="modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-preview-zone" id="modalPreviewZone"></div>
+        
+        <div class="meta-grid" id="modalMetaGrid">
+          <div class="meta-item">
+            <div class="meta-lbl">GridFS Object ID</div>
+            <div class="meta-val" id="metaObjectId">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-lbl">MIME Content-Type</div>
+            <div class="meta-val" id="metaMimeType">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-lbl">File Size</div>
+            <div class="meta-val" id="metaFileSize">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-lbl">GridFS Chunks</div>
+            <div class="meta-val" id="metaChunks">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-lbl">Uploaded By</div>
+            <div class="meta-val" id="metaUploadedBy">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-lbl">Upload Timestamp</div>
+            <div class="meta-val" id="metaUploadDate">-</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+          <a href="#" class="btn btn-primary" id="modalDownloadBtn" target="_blank">
+            <i class="fa-solid fa-download"></i> Download File
+          </a>
+          <button class="btn btn-secondary" id="modalCopyLinkBtn">
+            <i class="fa-solid fa-link"></i> Copy Direct Stream Link
+          </button>
+          <button class="btn btn-danger" id="modalDeleteBtn" style="margin-left: auto;">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="deleteConfirmModal">
+    <div class="modal-box" style="max-width: 440px; text-align: center;">
+      <div class="modal-body" style="padding: 2rem;">
+        <div style="width: 56px; height: 56px; background: rgba(239, 68, 68, 0.15); color: var(--danger); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; margin: 0 auto 1.25rem;">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3 style="font-size: 1.2rem; margin-bottom: 0.5rem;">Delete this file?</h3>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem;" id="deleteConfirmText">
+          This will permanently delete the file metadata and all its binary chunks from MongoDB GridFS.
+        </p>
+        <div style="display: flex; gap: 0.75rem; justify-content: center;">
+          <button class="btn btn-secondary" id="btnCancelDelete">Cancel</button>
+          <button class="btn btn-danger" id="btnConfirmDelete">Yes, Delete Permanently</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

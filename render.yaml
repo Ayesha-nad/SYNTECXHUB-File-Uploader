@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: file-uploader-api-gridfs
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MAX_FILE_SIZE_MB
+        value: 10
+      - key: GRIDFS_BUCKET_NAME
+        value: uploads
